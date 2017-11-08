@@ -8,6 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(custom_metrics).
 -author("pravosudov").
+-vsn("0.1.0").
 
 -behaviour(gen_server).
 
