@@ -70,3 +70,9 @@ metric_record_with_period_test() ->
     TestResult2 = custom_metrics:get(?METRIC_NAME2, ?GET_PERIOD),
 
     ?TIMES = TestResult2.
+
+metric_existing_add_test() ->
+    {error, table_already_exists} = custom_metrics:add(#metric{name = ?METRIC_NAME}).
+
+metric_not_existing_get_test() ->
+    {error, table_does_not_exist} = custom_metrics:get(unknown_metric).

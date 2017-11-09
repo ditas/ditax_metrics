@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(custom_metrics).
 -author("pravosudov").
--vsn("0.1.0").
+-vsn("0.1.1").
 
 -behaviour(gen_server).
 
@@ -68,18 +68,23 @@
 start_link(MetricsList) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [MetricsList], []).
 
+-spec(add(Metric :: #metric{} | atom()) -> ok | {error, table_already_exists}).
+
 add(#metric{name = MetricName} = Metric) ->
     case ets:info(MetricName) of
         undefined ->
             gen_server:call(?SERVER, {add, Metric});
         _ ->
-            lager:error("~p table already exists", [MetricName])
+            lager:error("~p table already exists", [MetricName]),
+            {error, table_already_exists}
     end;
 add(MetricName) ->
     case ets:info(MetricName) of
         undefined ->
-            gen_server:cast(?SERVER, {add, MetricName});
-        _ -> lager:error("~p table already exists", [MetricName])
+            gen_server:call(?SERVER, {add, MetricName});
+        _ ->
+            lager:error("~p table already exists", [MetricName]),
+            {error, table_already_exists}
     end.
 
 delete() ->
@@ -94,20 +99,27 @@ delete(MetricName) ->
 inc(MetricName) ->
     case ets:info(MetricName) of
         undefined -> lager:error("~p table does not exist", [MetricName]);
-        _ ->
-            gen_server:cast(?SERVER, {MetricName, increment, 1}) %% TODO: нужен ли value, если я всегда возвращаю
+        _ -> gen_server:cast(?SERVER, {MetricName, increment, 1}) %% TODO: нужен ли value, если я всегда возвращаю
         %% только кол-во записей из таблицы
     end.
 
+-spec(get(MetricName :: atom()) -> Res :: integer() | {error, table_does_not_exist}).
+
 get(MetricName) ->
     case ets:info(MetricName) of
-        undefined -> lager:error("~p table does not exist", [MetricName]);
+        undefined ->
+            lager:error("~p table does not exist", [MetricName]),
+            {error, table_does_not_exist};
         _ -> gen_server:call(?SERVER, {get, MetricName})
     end.
 
+-spec(get(MetricName :: atom(), Period :: integer()) -> Res :: integer() | {error, table_does_not_exist}).
+
 get(MetricName, Period) ->
     case ets:info(MetricName) of
-        undefined -> lager:error("~p table does not exist", [MetricName]);
+        undefined ->
+            lager:error("~p table does not exist", [MetricName]),
+            {error, table_does_not_exist};
         _ -> gen_server:call(?SERVER, {get, MetricName, Period})
     end.
 
