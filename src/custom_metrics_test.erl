@@ -15,16 +15,18 @@
 -define(METRIC_NAME, test).
 -define(METRIC_NAME1, test1).
 -define(METRIC_NAME2, test2).
--define(METRIC_PERIOD, 1500).
--define(GET_PERIOD, 1000).
+-define(METRIC_PERIOD, 1).
+-define(GET_PERIOD, 2).
 -define(TIMES, 3).
 
 metric_name_only_test() ->
     lager:start(),
+
     custom_metrics:start_link([?METRIC_NAME]),
 
     lists:foreach(fun(_) ->
-        custom_metrics:inc(?METRIC_NAME)
+        custom_metrics:inc(?METRIC_NAME),
+        timer:sleep(100)
                   end, lists:seq(1, ?TIMES)),
 
     TestResult = custom_metrics:get(?METRIC_NAME),
@@ -35,7 +37,8 @@ metric_record_test() ->
     custom_metrics:add(#metric{name = ?METRIC_NAME1}),
 
     lists:foreach(fun(_) ->
-        custom_metrics:inc(?METRIC_NAME1)
+        custom_metrics:inc(?METRIC_NAME1),
+        timer:sleep(100)
                   end, lists:seq(1, ?TIMES)),
 
     TestResult = custom_metrics:get(?METRIC_NAME1),
@@ -43,6 +46,10 @@ metric_record_test() ->
     ?TIMES = TestResult.
 
 metric_record_with_period_test() ->
+
+%%    lager:start(),
+%%    custom_metrics:start_link([#metric{name = ?METRIC_NAME2, period = ?METRIC_PERIOD}]),
+
     custom_metrics:add(#metric{name = ?METRIC_NAME2, period = ?METRIC_PERIOD}),
 
     lists:foreach(fun(_) ->
@@ -53,23 +60,17 @@ metric_record_with_period_test() ->
 
     ?TIMES = TestResult,
 
-    timer:sleep(1750),
+    timer:sleep(3000),
 
     custom_metrics:inc(?METRIC_NAME2),
 
-    TestResult1 = custom_metrics:get(?METRIC_NAME2),
+    timer:sleep(1000),
 
-    1 = TestResult1,
+    custom_metrics:inc(?METRIC_NAME2),
 
-    timer:sleep(1750),
+    TestResult1 = custom_metrics:get(?METRIC_NAME2, ?GET_PERIOD),
 
-    lists:foreach(fun(_) ->
-        custom_metrics:inc(?METRIC_NAME2)
-                  end, lists:seq(1, ?TIMES)),
-
-    TestResult2 = custom_metrics:get(?METRIC_NAME2, ?GET_PERIOD),
-
-    ?TIMES = TestResult2.
+    2 = TestResult1.
 
 metric_existing_add_test() ->
     {error, table_already_exists} = custom_metrics:add(#metric{name = ?METRIC_NAME}).

@@ -1,13 +1,11 @@
-<h1>How to use</h1>
+#How to use
 
-<p>Start the module:<br>
-<em>custom_metrics:start_link([Metric])</em><br>
-where <em>Metric</em> can be just a name (atom) or a record <em>#metric{}</em>.</p>
+Start the module: `custom_metrics:start_link([Metric])` where `Metric` can be just a name (atom) or a record `#metric{}`.
 
-<p>If you want to add some default value for the metric's reset use <em>#metric{period = some_value_in_milliseconds}</em>. Besides, if you have this period given, you will get the metric value for this exact period.</p>
+If you want to add some default value for the metric's reset use `#metric{period = some_value_in_seconds}`. Besides, if you have this period given, by default you will get the metric value for this exact period.
 
-<p>If you want to add some metrics when the module is already started use <em>custom_metrics:add(Metric)</em> where <em>Metric</em> is atom() | #metric{name = SomeName} | #metric{name = SomeName, period = SomePeriod}.</p>
+If you want to add some metrics when the module is already started use `custom_metrics:add(Metric)` where `Metric` is `atom() | #metric{name = SomeName} | #metric{name = SomeName, period = SomePeriod}`.
 
-<p>To add new value for the metric use <em>custom_metrics:inc(MetricName)</em> where MetricName is atom().</p>
+To add new value for the metric use `custom_metrics:inc(MetricName)` where MetricName is `atom()` or `custom_metrics:inc(MetricName, SomeValue)`.
 
-<p>To get the result use <em>custom_metrics:get(MetricName)</em> or <em>custom_metrics:get(MetricName, CustomPeriod)</em> where CustomPeriod is less than the default period used for creating this metric (if there is one).</p>
+To get the result use `custom_metrics:get(MetricName)` or `custom_metrics:get(MetricName, CustomPeriod)` where CustomPeriod is less than the default period used for creating this metric (if there is one).

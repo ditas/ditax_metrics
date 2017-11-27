@@ -8,10 +8,11 @@
 %%%-------------------------------------------------------------------
 -module(custom_metrics).
 -author("pravosudov").
--vsn("0.1.1").
+-vsn("0.1.2").
 
 -behaviour(gen_server).
 
+-include_lib("../../include/common.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
@@ -21,6 +22,7 @@
     delete/0,
     delete/1,
     inc/1,
+    inc/2,
     get/1,
     get/2
 ]).
@@ -39,14 +41,9 @@
     metrics = []
 }).
 
--record(metric, {
-    name,
-    period %% Milliseconds
-}).
-
 -record(created_metric, {
     name,
-    period, %% Milliseconds
+    period, %% Seconds
     timer_ref
 }).
 
@@ -99,8 +96,13 @@ delete(MetricName) ->
 inc(MetricName) ->
     case ets:info(MetricName) of
         undefined -> lager:error("~p table does not exist", [MetricName]);
-        _ -> gen_server:cast(?SERVER, {MetricName, increment, 1}) %% TODO: нужен ли value, если я всегда возвращаю
-        %% только кол-во записей из таблицы
+        _ -> gen_server:cast(?SERVER, {MetricName, increment, 1})
+    end.
+
+inc(MetricName, Value) ->
+    case ets:info(MetricName) of
+        undefined -> lager:error("~p table does not exist", [MetricName]);
+        _ -> gen_server:cast(?SERVER, {MetricName, increment, Value})
     end.
 
 -spec(get(MetricName :: atom()) -> Res :: integer() | {error, table_does_not_exist}).
@@ -165,35 +167,25 @@ handle_call({add, Metric}, _From, State) ->
 handle_call({get, MetricName}, _From, State) ->
     case lists:keyfind(MetricName, #created_metric.name, State#state.metrics) of
         #created_metric{period = Period} when Period =/= undefined ->
-            StartTime = erlang:system_time() - Period*1000,
-            MS = [{#metric_data{time = '$1',value = '_'},
+            StartTime = erlang:system_time(second) - Period,
+            MS = [{#metric_data{time = '$1',value = '$2'},
                    [{'>=','$1',StartTime}],
-                   [true]}],
-            Count = ets:select_count(MetricName, MS),
+                   ['$_']}],
+            Selection = ets:select(MetricName, MS),
+            Count = lists:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, Selection),
             Count;
         #created_metric{} ->
-            [{read_concurrency,_},
-             {write_concurrency,_},
-             {compressed,_},
-             {memory,_},
-             {owner,_},
-             {heir,_},
-             {name,_},
-             {size,Count},
-             {node,_},
-             {named_table,_},
-             {type,_},
-             {keypos,_},
-             {protection,_}] = ets:info(MetricName),
+            Count = ets:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, MetricName),
             Count
     end,
     {reply, Count, State};
 handle_call({get, MetricName, Period}, _From, State) ->
-    StartTime = erlang:system_time() - Period*1000,
-    MS = [{#metric_data{time = '$1',value = '_'},
+    StartTime = erlang:system_time(second) - Period,
+    MS = [{#metric_data{time = '$1',value = '$2'},
            [{'>=','$1',StartTime}],
-           [true]}],
-    Count = ets:select_count(MetricName, MS),
+           ['$_']}],
+    Selection = ets:select(MetricName, MS),
+    Count = lists:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, Selection),
     {reply, Count, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -210,7 +202,13 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast({MetricName, increment, Value}, State) ->
-    true = ets:insert(MetricName, #metric_data{time = erlang:system_time(), value = Value}),
+    Key = erlang:system_time(second),
+    case ets:lookup(MetricName, Key) of
+        [] ->
+            ets:insert(MetricName, #metric_data{time = Key, value = Value});
+        _ ->
+            _Result = ets:update_counter(MetricName, erlang:system_time(second), {#metric_data.value, Value})
+    end,
     {noreply, State};
 handle_cast(delete, State) ->
     State1 = lists:foldl(fun(M, S) ->
@@ -242,13 +240,19 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_info({reset, MetricName, Period}, State) ->
-    StartTime = erlang:system_time() - Period*1000,
-    MS = [{#metric_data{time = '$1',value = '_'},
+    StartTime = erlang:system_time(second) - Period,
+    MS = [{{'_', '$1','$2'},
            [{'<','$1',StartTime}],
            [true]}],
 
+    lager:error("StartTime ~p Period ~p", [StartTime, Period]),
+    MStmp = [{{'_', '$1','$2'},
+              [{'>','$1',0}],
+              ['$_']}],
+    lager:error("Data ~p", [ets:select(MetricName, MStmp)]),
+
     %% TODO: проверить производительность
-    ets:select_delete(MetricName, MS),
+    _Result = ets:select_delete(MetricName, MS),
 
     {noreply, State};
 handle_info(_Info, State) ->
@@ -297,7 +301,7 @@ create_metric(Metric, State) ->
                 undefined ->
                     State#state{metrics = [#created_metric{name = Metric#metric.name} | CurrentMetrics]};
                 Period ->
-                    {ok, TRef} = timer:send_interval(Period, {reset, Metric#metric.name, Period}),
+                    {ok, TRef} = timer:send_interval(Period * 1000, {reset, Metric#metric.name, Period}),
                     State#state{metrics = [#created_metric{name = Metric#metric.name, period = Period, timer_ref = TRef} | CurrentMetrics]}
             end;
         false ->
