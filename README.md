@@ -1,4 +1,8 @@
-#How to use
+###ditax_metrics
+It is a simple erlang module to collect any custom metrics from your erlang apps. Module works as erlang gen_server, which keeps all your metrics in ets tables.
+You can collect metrics for any reasonble period of time. When creating a new metric to store you can set the reset period for this metric. In this case you will get the result for the settled period (if no other period is defined). Also you can skip the value of metric so that will be always 1 or you can set it in your `inc/2` call.
+
+###How to use
 
 Start the module: `custom_metrics:start_link([Metric])` where `Metric` can be just a name (atom) or a record `#metric{}`.
 
