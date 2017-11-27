@@ -6,14 +6,13 @@
 %%% @end
 %%% Created : 31. Oct 2017 13:25
 %%%-------------------------------------------------------------------
--module(custom_metrics).
+-module(ditax_metrics).
 -author("pravosudov").
--vsn("0.1.2").
+-vsn("0.1.3").
+
+-include_lib("../include/ditax_metrics.hrl").
 
 -behaviour(gen_server).
-
--include_lib("../../include/common.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 %% API
 -export([
@@ -39,17 +38,6 @@
 
 -record(state, {
     metrics = []
-}).
-
--record(created_metric, {
-    name,
-    period, %% Seconds
-    timer_ref
-}).
-
--record(metric_data, {
-    time,
-    value
 }).
 
 %%%===================================================================
@@ -244,12 +232,6 @@ handle_info({reset, MetricName, Period}, State) ->
     MS = [{{'_', '$1','$2'},
            [{'<','$1',StartTime}],
            [true]}],
-
-    lager:error("StartTime ~p Period ~p", [StartTime, Period]),
-    MStmp = [{{'_', '$1','$2'},
-              [{'>','$1',0}],
-              ['$_']}],
-    lager:error("Data ~p", [ets:select(MetricName, MStmp)]),
 
     %% TODO: проверить производительность
     _Result = ets:select_delete(MetricName, MS),
