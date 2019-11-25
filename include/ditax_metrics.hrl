@@ -1,12 +1,7 @@
 -record(metric, {
     name,
-    period %% Seconds
-}).
-
--record(created_metric, {
-    name,
     period, %% Seconds
-    timer_ref
+    show_every %% Seconds
 }).
 
 -record(metric_data, {

@@ -1,11 +1,3 @@
-%%%-------------------------------------------------------------------
-%%% @author pravosudov
-%%% @copyright (C) 2017, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 31. Oct 2017 13:25
-%%%-------------------------------------------------------------------
 -module(ditax_metrics).
 -author("pravosudov").
 -vsn("0.1.3").
@@ -53,65 +45,26 @@
 start_link(MetricsList) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [MetricsList], []).
 
--spec(add(Metric :: #metric{} | atom()) -> ok | {error, table_already_exists}).
-
-add(#metric{name = MetricName} = Metric) ->
-    case ets:info(MetricName) of
-        undefined ->
-            gen_server:call(?SERVER, {add, Metric});
-        _ ->
-            lager:error("~p table already exists", [MetricName]),
-            {error, table_already_exists}
-    end;
-add(MetricName) ->
-    case ets:info(MetricName) of
-        undefined ->
-            gen_server:call(?SERVER, {add, MetricName});
-        _ ->
-            lager:error("~p table already exists", [MetricName]),
-            {error, table_already_exists}
-    end.
+add(Metric) ->
+    gen_server:cast(?SERVER, {add, Metric}).
 
 delete() ->
     gen_server:cast(?SERVER, delete).
 
 delete(MetricName) ->
-    case ets:info(MetricName) of
-        undefined -> lager:error("~p table does not exist", [MetricName]);
-        _ -> gen_server:cast(?SERVER, {delete, MetricName})
-    end.
+    gen_server:cast(?SERVER, MetricName).
 
 inc(MetricName) ->
-    case ets:info(MetricName) of
-        undefined -> lager:error("~p table does not exist", [MetricName]);
-        _ -> gen_server:cast(?SERVER, {MetricName, increment, 1})
-    end.
+    gen_server:cast(?SERVER, {MetricName, increment, 1}).
 
 inc(MetricName, Value) ->
-    case ets:info(MetricName) of
-        undefined -> lager:error("~p table does not exist", [MetricName]);
-        _ -> gen_server:cast(?SERVER, {MetricName, increment, Value})
-    end.
-
--spec(get(MetricName :: atom()) -> Res :: integer() | {error, table_does_not_exist}).
+    gen_server:cast(?SERVER, {MetricName, increment, Value}).
 
 get(MetricName) ->
-    case ets:info(MetricName) of
-        undefined ->
-            lager:error("~p table does not exist", [MetricName]),
-            {error, table_does_not_exist};
-        _ -> gen_server:call(?SERVER, {get, MetricName})
-    end.
-
--spec(get(MetricName :: atom(), Period :: integer()) -> Res :: integer() | {error, table_does_not_exist}).
+    gen_server:call(?SERVER, {get, MetricName}).
 
 get(MetricName, Period) ->
-    case ets:info(MetricName) of
-        undefined ->
-            lager:error("~p table does not exist", [MetricName]),
-            {error, table_does_not_exist};
-        _ -> gen_server:call(?SERVER, {get, MetricName, Period})
-    end.
+    gen_server:call(?SERVER, {get, MetricName, Period}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -129,8 +82,14 @@ get(MetricName, Period) ->
 %% @end
 %%--------------------------------------------------------------------
 init([MetricsList]) ->
-    State = lists:foldl(fun(El, S) ->
-        create_metric(El, S)
+    
+    io:format("--------INIT ~p~n", [?MODULE]),
+    
+    State = lists:foldl(fun(M, S) ->
+        case lists:member(M, S#state.metrics) of
+            true -> S;
+            false -> create_metric(M, S)
+        end
     end, #state{}, MetricsList),
     {ok, State}.
 
@@ -149,32 +108,24 @@ init([MetricsList]) ->
                      {noreply, NewState :: #state{}, timeout() | hibernate} |
                      {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
                      {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({add, Metric}, _From, State) ->
-    State1 = create_metric(Metric, State),
-    {reply, ok, State1};
 handle_call({get, MetricName}, _From, State) ->
-    case lists:keyfind(MetricName, #created_metric.name, State#state.metrics) of
-        #created_metric{period = Period} when Period =/= undefined ->
-            StartTime = erlang:system_time(second) - Period,
-            MS = [{#metric_data{time = '$1',value = '$2'},
-                   [{'>=','$1',StartTime}],
-                   ['$_']}],
-            Selection = ets:select(MetricName, MS),
-            Count = lists:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, Selection),
-            Count;
-        #created_metric{} ->
-            Count = ets:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, MetricName),
-            Count
+    Res = case lists:member(MetricName, State#state.metrics) of
+        true ->
+            gen_server:call(MetricName, get);
+        _ ->
+            lager:error("~p table does not exist ~p", [MetricName, State#state.metrics]),
+            {error, wrong_metric}
     end,
-    {reply, Count, State};
+    {reply, Res, State};
 handle_call({get, MetricName, Period}, _From, State) ->
-    StartTime = erlang:system_time(second) - Period,
-    MS = [{#metric_data{time = '$1',value = '$2'},
-           [{'>=','$1',StartTime}],
-           ['$_']}],
-    Selection = ets:select(MetricName, MS),
-    Count = lists:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, Selection),
-    {reply, Count, State};
+    Res = case lists:member(MetricName, State#state.metrics) of
+              true ->
+                  gen_server:call(MetricName, {get, Period});
+              _ ->
+                  lager:error("~p table does not exist", [MetricName]),
+                  {error, wrong_metric}
+          end,
+    {reply, Res, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -189,26 +140,49 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast({add, #metric{name = MetricName} = Metric}, State) ->
+    State1 = case lists:member(MetricName, State#state.metrics) of
+                 false ->
+                     create_metric(Metric, State);
+                 _ ->
+                     lager:error("~p table already exists", [MetricName]),
+                     State
+             end,
+    {noreply, State1};
+handle_cast({add, MetricName}, State) ->
+    State1 = case lists:member(MetricName, State#state.metrics) of
+                false ->
+                    create_metric(MetricName, State);
+                _ ->
+                    lager:error("~p table already exists", [MetricName]),
+                    State
+            end,
+    {noreply, State1};
 handle_cast({MetricName, increment, Value}, State) ->
-    Key = erlang:system_time(second),
-    case ets:lookup(MetricName, Key) of
-        [] ->
-            ets:insert(MetricName, #metric_data{time = Key, value = Value});
+    case lists:member(MetricName, State#state.metrics) of
+        true ->
+            gen_server:cast(MetricName, {increment, Value});
         _ ->
-            _Result = ets:update_counter(MetricName, erlang:system_time(second), {#metric_data.value, Value})
+            lager:error("~p table does not exist", [MetricName])
     end,
     {noreply, State};
 handle_cast(delete, State) ->
     State1 = lists:foldl(fun(M, S) ->
-        ets:delete(element(1, M)),
+        ok = gen_server:cast(M, {delete, M}),
         CurrentMetrics = S#state.metrics,
         S#state{metrics = lists:delete(M, CurrentMetrics)}
     end, State, State#state.metrics),
     {noreply, State1};
 handle_cast({delete, MetricName}, State) ->
-    ets:delete(MetricName),
-    CurrentMetrics = State#state.metrics,
-    State1 = State#state{metrics = lists:keydelete(MetricName, 1, CurrentMetrics)},
+    State1 = case lists:member(MetricName, State#state.metrics) of
+        true ->
+            ok = gen_server:cast(MetricName, {delete, MetricName}),
+            CurrentMetrics = State#state.metrics,
+            State#state{metrics = lists:keydelete(MetricName, 1, CurrentMetrics)};
+        _ ->
+            lager:error("~p table does not exist", [MetricName]),
+            State
+    end,
     {noreply, State1};
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -227,16 +201,6 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_info({reset, MetricName, Period}, State) ->
-    StartTime = erlang:system_time(second) - Period,
-    MS = [{{'_', '$1','$2'},
-           [{'<','$1',StartTime}],
-           [true]}],
-
-    %% TODO: проверить производительность
-    _Result = ets:select_delete(MetricName, MS),
-
-    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -274,19 +238,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-create_metric(Metric, State) ->
+create_metric(#metric{name = MetricName} = Metric, State) ->
     CurrentMetrics = State#state.metrics,
-    case is_record(Metric, metric) of
-        true ->
-            ets:new(Metric#metric.name, [ordered_set, named_table, {keypos, #metric_data.time}]),
-            case Metric#metric.period of
-                undefined ->
-                    State#state{metrics = [#created_metric{name = Metric#metric.name} | CurrentMetrics]};
-                Period ->
-                    {ok, TRef} = timer:send_interval(Period * 1000, {reset, Metric#metric.name, Period}),
-                    State#state{metrics = [#created_metric{name = Metric#metric.name, period = Period, timer_ref = TRef} | CurrentMetrics]}
-            end;
-        false ->
-            ets:new(Metric, [ordered_set, named_table, {keypos, #metric_data.time}]),
-            State#state{metrics = [#created_metric{name = Metric} | CurrentMetrics]}
-    end.
+    {ok, _Pid} = ditax_metric:start_link(Metric),
+    State#state{metrics = [MetricName | CurrentMetrics]};
+create_metric(MetricName, State) ->
+    CurrentMetrics = State#state.metrics,
+    {ok, _Pid} = ditax_metric:start_link(MetricName),
+    State#state{metrics = [MetricName | CurrentMetrics]}.
