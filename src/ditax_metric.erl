@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author dmitry.pravosudov
+%%% @author ditas
 %%% @copyright (C) 2019, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 22. Nov 2019 14:09
 %%%-------------------------------------------------------------------
 -module(ditax_metric).
--author("dmitry.pravosudov").
+-author("ditas").
 
 -include_lib("../include/ditax_metrics.hrl").
 
