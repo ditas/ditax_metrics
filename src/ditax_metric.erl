@@ -78,6 +78,9 @@ handle_call(get, _From, #state{name = MetricName, period = Period} = State) ->
 handle_call({get, Period}, _From, #state{name = MetricName} = State) ->
     Count = count(MetricName, Period),
     {reply, Count, State};
+handle_call({avg, Period}, _From, #state{name = MetricName} = State) ->
+    Count = avg(MetricName, Period),
+    {reply, Count, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -87,9 +90,9 @@ handle_cast({increment, Value}, State) ->
     Key = erlang:system_time(second),
     _ = case ets:lookup(State#state.name, Key) of
         [] ->
-            ets:insert(State#state.name, #metric_data{time = Key, value = Value});
+            ets:insert(State#state.name, #metric_data{time = Key, value = Value, counter = 1});
         _ ->
-            ets:update_counter(State#state.name, Key, {#metric_data.value, Value})
+            ets:update_counter(State#state.name, Key, [{#metric_data.value, Value}, {#metric_data.counter, 1}])
     end,
     {noreply, State};
 handle_cast(_Request, State) ->
@@ -132,9 +135,22 @@ count(MetricName, Period) ->
     case Period =/= undefined of
         true ->
             StartTime = erlang:system_time(second) - Period,
-            MS = [{#metric_data{time = '$1', value = '$2'}, [{'>=', '$1', StartTime}], ['$_']}],
+            MS = [{#metric_data{time = '$1', value = '$2', counter = '$3'}, [{'>=', '$1', StartTime}], ['$_']}],
             Selection = ets:select(MetricName, MS),
             lists:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, Selection);
         false ->
             ets:foldl(fun(#metric_data{value = V}, Acc) -> Acc + V end, 0, MetricName)
+    end.
+
+avg(MetricName, Period) ->
+    case Period =/= undefined of
+        true ->
+            StartTime = erlang:system_time(second) - Period,
+            MS = [{#metric_data{time = '$1', value = '$2', counter = '$3'}, [{'>=', '$1', StartTime}], ['$_']}],
+            Selection = ets:select(MetricName, MS),
+            {Total, Counter} = lists:foldl(fun(#metric_data{value = V, counter = C}, {SumV, SumC}) -> {SumV + V, SumC + C} end, {0, 0}, Selection),
+            Total/Counter;
+        false ->
+            {Total, Counter} = ets:foldl(fun(#metric_data{value = V, counter = C}, {SumV, SumC}) -> {SumV + V, SumC + C} end, {0, 0}, MetricName),
+            Total/Counter
     end.
