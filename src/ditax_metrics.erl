@@ -15,7 +15,9 @@
     inc/1,
     inc/2,
     get/1,
-    get/2
+    get/2,
+    avg/1,
+    avg/2
 ]).
 
 %% gen_server callbacks
@@ -62,6 +64,12 @@ get(MetricName) ->
 get(MetricName, Period) ->
     gen_server:call(?SERVER, {get, MetricName, Period}).
 
+avg(MetricName) ->
+    avg(MetricName, undefined).
+
+avg(MetricName, Period) ->
+    gen_server:call(?SERVER, {avg, MetricName, Period}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -100,6 +108,16 @@ handle_call({get, MetricName, Period}, _From, State) ->
         case lists:member(MetricName, State#state.metrics) of
             true ->
                 gen_server:call(MetricName, {get, Period});
+            _ ->
+                logger:error("~p table does not exist", [MetricName]),
+                {error, wrong_metric}
+        end,
+    {reply, Res, State};
+handle_call({avg, MetricName, Period}, _From, State) ->
+    Res =
+        case lists:member(MetricName, State#state.metrics) of
+            true ->
+                gen_server:call(MetricName, {avg, Period});
             _ ->
                 logger:error("~p table does not exist", [MetricName]),
                 {error, wrong_metric}

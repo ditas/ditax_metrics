@@ -6,5 +6,6 @@
 
 -record(metric_data, {
     time,
-    value
+    value,
+    counter
 }).
