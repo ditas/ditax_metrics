@@ -9,5 +9,3 @@
     value,
     counter
 }).
-
--define(APP, ditax_metrics).
