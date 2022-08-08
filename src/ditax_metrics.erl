@@ -8,6 +8,7 @@
 %% API
 -export([
     start_link/1,
+    start/1,
     add/1,
     delete/0,
     delete/1,
@@ -43,6 +44,9 @@
 
 start_link(MetricsList) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [MetricsList], []).
+
+start(MetricsList) ->
+    gen_server:start({local, ?SERVER}, ?MODULE, [MetricsList], []).
 
 add(Metric) ->
     gen_server:cast(?SERVER, {add, Metric}).

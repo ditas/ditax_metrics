@@ -21,11 +21,10 @@
     {ok, pid()} | {error, Reason :: term()}.
 start(_StartType, _StartArgs) ->
 
-    DefaultMetrics = application:get_env(ditax_metrics, default_metrics, []),
-
-    logger:debug("------------------DefaultMetrics ~p", [DefaultMetrics]),
-
-    _ = ditax_metrics:start_link(DefaultMetrics),
+    case application:get_env(ditax_metrics, default_metrics, undefined) of
+        undefined -> ignore;
+        DefaultMetrics -> ditax_metrics:start(DefaultMetrics)
+    end,
 
     ditax_metrics_sup:start_link().
 
