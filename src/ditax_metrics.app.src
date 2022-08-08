@@ -1,0 +1,15 @@
+{application, ditax_metrics, [
+    {description, "ETS based metrics app"},
+    {vsn, "0.2.0"},
+    {registered, []},
+    {included_applications, []},
+    {mod, {ditax_metrics_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl
+    ]},
+    {env, []},
+    {modules, []},
+    {links, []}
+]}.

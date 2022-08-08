@@ -1,6 +1,5 @@
 -module(ditax_metrics).
--author("pravosudov").
--vsn("0.1.3").
+-author("ditas").
 
 -include_lib("../include/ditax_metrics.hrl").
 
@@ -14,6 +13,8 @@
     delete/1,
     inc/1,
     inc/2,
+    dec/1,
+    dec/2,
     get/1,
     get/2,
     avg/1,
@@ -58,6 +59,12 @@ inc(MetricName) ->
 inc(MetricName, Value) ->
     gen_server:cast(?SERVER, {MetricName, increment, Value}).
 
+dec(MetricName) ->
+    gen_server:cast(?SERVER, {MetricName, decrement, -1}).
+
+dec(MetricName, Value) ->
+    gen_server:cast(?SERVER, {MetricName, decrement, Value}).
+
 get(MetricName) ->
     gen_server:call(?SERVER, {get, MetricName}).
 
@@ -75,6 +82,9 @@ avg(MetricName, Period) ->
 %%%===================================================================
 
 init([MetricsList]) ->
+
+    logger:debug("-------------------------MetricsList ~p", [MetricsList]),
+
     State = lists:foldl(
         fun(M, S) ->
             case lists:member(M, S#state.metrics) of
@@ -159,6 +169,16 @@ handle_cast({MetricName, increment, Value}, State) ->
             logger:error("~p table does not exist", [MetricName])
     end,
     {noreply, State};
+handle_cast({MetricName, decrement, Value}, State) ->
+    case lists:member(MetricName, State#state.metrics) of
+        true when Value < 0 ->
+            gen_server:cast(MetricName, {increment, Value});
+        true ->
+            gen_server:cast(MetricName, {increment, Value * -1});
+        _ ->
+            logger:error("~p table does not exist", [MetricName])
+    end,
+    {noreply, State};
 handle_cast(delete, State) ->
     State1 = lists:foldl(
         fun(M, S) ->
@@ -211,10 +231,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 create_metric(#metric{name = MetricName} = Metric, State) ->
+
+    logger:debug("------------Metric ~p", [Metric]),
+
     CurrentMetrics = State#state.metrics,
     {ok, _Pid} = ditax_metric:start_link(Metric),
     State#state{metrics = [MetricName | CurrentMetrics]};
 create_metric(MetricName, State) ->
+
+    logger:debug("------------MetricName ~p", [MetricName]),
+
     CurrentMetrics = State#state.metrics,
     {ok, _Pid} = ditax_metric:start_link(MetricName),
     State#state{metrics = [MetricName | CurrentMetrics]}.
