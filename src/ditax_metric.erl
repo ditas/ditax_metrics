@@ -18,8 +18,6 @@
     code_change/3
 ]).
 
--define(SERVER, ?MODULE).
-
 -record(state, {
     name,
     period,
@@ -61,8 +59,6 @@ init(Metric) when is_record(Metric, metric) ->
     end,
     {ok, State};
 init(Metric) ->
-    % io:format("--------INIT 2 ~p ~p ~p~n", [is_record(Metric, metric), ?MODULE, Metric]),
-
     _Name = ets:new(Metric, [ordered_set, named_table, {keypos, #metric_data.time}]),
     {ok, #state{name = Metric}}.
 
@@ -149,8 +145,15 @@ avg(MetricName, Period) ->
             MS = [{#metric_data{time = '$1', value = '$2', counter = '$3'}, [{'>=', '$1', StartTime}], ['$_']}],
             Selection = ets:select(MetricName, MS),
             {Total, Counter} = lists:foldl(fun(#metric_data{value = V, counter = C}, {SumV, SumC}) -> {SumV + V, SumC + C} end, {0, 0}, Selection),
-            Total/Counter;
+            calculate_avg(Total, Counter);
         false ->
             {Total, Counter} = ets:foldl(fun(#metric_data{value = V, counter = C}, {SumV, SumC}) -> {SumV + V, SumC + C} end, {0, 0}, MetricName),
-            Total/Counter
+            calculate_avg(Total, Counter)
     end.
+
+calculate_avg(0, _) ->
+    0;
+calculate_avg(_, 0) ->
+    undefined;
+calculate_avg(A, B) ->
+    A/B.

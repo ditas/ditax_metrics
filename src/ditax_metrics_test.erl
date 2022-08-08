@@ -1,13 +1,5 @@
-%%%-------------------------------------------------------------------
-%%% @author pravosudov
-%%% @copyright (C) 2017, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 02. Nov 2017 12:16
-%%%-------------------------------------------------------------------
 -module(ditax_metrics_test).
--author("pravosudov").
+-author("ditas").
 
 -include_lib("../include/ditax_metrics.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -20,9 +12,7 @@
 -define(TIMES, 3).
 
 metric_name_only_test() ->
-    lager:start(),
-
-    ditax_metrics:start_link([?METRIC_NAME]),
+    {ok, _} = ditax_metrics:start_link([?METRIC_NAME]),
 
     lists:foreach(fun(_) ->
         ditax_metrics:inc(?METRIC_NAME),
@@ -46,10 +36,6 @@ metric_record_test() ->
     ?TIMES = TestResult.
 
 metric_record_with_period_test() ->
-
-%%    lager:start(),
-%%    ditax_metrics:start_link([#metric{name = ?METRIC_NAME2, period = ?METRIC_PERIOD}]),
-
     ditax_metrics:add(#metric{name = ?METRIC_NAME2, period = ?METRIC_PERIOD}),
 
     lists:foreach(fun(_) ->
@@ -72,8 +58,5 @@ metric_record_with_period_test() ->
 
     2 = TestResult1.
 
-metric_existing_add_test() ->
-    {error, table_already_exists} = ditax_metrics:add(#metric{name = ?METRIC_NAME}).
-
 metric_not_existing_get_test() ->
-    {error, table_does_not_exist} = ditax_metrics:get(unknown_metric).
+    {error, wrong_metric} = ditax_metrics:get(unknown_metric).
